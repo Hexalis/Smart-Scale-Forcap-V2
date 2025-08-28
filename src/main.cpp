@@ -1,18 +1,20 @@
 #include <Arduino.h>
-
-// put function declarations here:
-int myFunction(int, int);
+#include "core/app_state.h"
+#include "features/supervisor.h"
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+  Serial.begin(115200);
+  delay(50);
+  Serial.println();
+  Serial.println("SmartScale boot");
+
+  app_state_init();
+  supervisor_start();
+
+  Serial.println("Supervisor started");
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
-
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+  // Nothing here. Everything runs in tasks.
+  vTaskDelay(pdMS_TO_TICKS(1000));
 }
