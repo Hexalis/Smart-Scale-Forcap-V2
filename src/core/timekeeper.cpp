@@ -14,11 +14,11 @@ void timekeeper_start() {
   xTaskCreatePinnedToCore(
     timeTask,
     "timekeeper",
-    3072,
+    TASK_STACK_TIME,
     nullptr,
-    2,
+    TASK_PRIO_TIME,
     nullptr,
-    0   // time/network work on core 0 is fine
+    (TASK_CORE_TIME < 0) ? tskNO_AFFINITY : TASK_CORE_TIME   // time/network work on core 0 is fine
   );
 }
 
@@ -40,34 +40,66 @@ static bool waitForTime(uint32_t timeoutMs) {
 }
 
 static void timeTask(void*) {
+  // Set timezone once (affects getLocalTime/ctime/localtime; not needed for epoch)
+  setenv("TZ", TZ_SLOVENIA, 1);
+  tzset();
+
   bool lastNet = false;
+  uint32_t lastSyncMs = 0;  // 0 = never synced in this boot
 
   for (;;) {
-    // Check NET_UP bit
     const bool netUp = (app_get_bits() & AppBits::NET_UP) != 0;
+    const uint32_t nowMs = millis();
 
     if (netUp && !lastNet) {
-    // Just came online → try NTP
-    Serial.println("[Time] NET_UP: syncing NTP...");
-    if (waitForTime(NTP_SYNC_TIMEOUT_MS)) {
-      app_set_bits(AppBits::TIME_VALID);
-      time_t now = time(nullptr);
-      Serial.printf("[Time] Sync OK. Epoch=%ld\n", (long)now);
-    } else {
-      app_clear_bits(AppBits::TIME_VALID);
-      Serial.println("[Time] Sync FAILED.");
+      // Just came online → try NTP
+      Serial.println("[Time] NET_UP: syncing NTP...");
+      if (waitForTime(NTP_SYNC_TIMEOUT_MS)) {
+        app_set_bits(AppBits::TIME_VALID);
+        lastSyncMs = nowMs;
+
+        time_t now = time(nullptr);
+        struct tm tinfo;
+        if (getLocalTime(&tinfo)) {
+          // Format: YYYY-MM-DD HH:MM:SS
+          char buf[32];
+          strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tinfo);
+          Serial.printf("[Time] Sync OK. Epoch=%ld  Local=%s\r\n", (long)now, buf);
+        } else {
+          Serial.printf("[Time] Sync OK. Epoch=%ld\r\n", (long)now);
+        }
+      }
     }
-  }
 
     if (!netUp && lastNet) {
-      // Lost network → mark time as potentially invalid (you can keep it if you prefer)
+      // Lost network → mark time as potentially invalid
       app_clear_bits(AppBits::TIME_VALID);
       Serial.println("[Time] NET_DOWN: time marked invalid.");
     }
 
+    // Periodic resync while online
+    if (netUp && (nowMs - lastSyncMs >= TIME_RESYNC_INTERVAL_MS)) {
+      Serial.println("[Time] Periodic NTP resync...");
+      if (waitForTime(NTP_SYNC_TIMEOUT_MS)) {
+        app_set_bits(AppBits::TIME_VALID);
+        lastSyncMs = nowMs;
+
+        time_t now = time(nullptr);
+        struct tm tinfo;
+        if (getLocalTime(&tinfo)) {
+          char buf[32];
+          strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tinfo);
+          Serial.printf("[Time] Resync OK. Epoch=%ld  Local=%s\r\n", (long)now, buf);
+        } else {
+          Serial.printf("[Time] Resync OK. Epoch=%ld\r\n", (long)now);
+        }
+      }
+    }
+
+
     lastNet = netUp;
     vTaskDelay(pdMS_TO_TICKS(500));
-    }
+  }
 }
 
 bool time_is_valid() {

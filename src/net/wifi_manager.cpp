@@ -22,11 +22,11 @@ void wifi_start() {
   xTaskCreatePinnedToCore(
     wifiTask,
     "wifi",
-    4096,
+    TASK_STACK_WIFI,
     nullptr,
-    3,
+    TASK_PRIO_WIFI,
     nullptr,            // prio 3 is fine; networking is important
-    0                      // pin to core 0 (ESP32 WiFi stack prefers core 0)
+    (TASK_CORE_WIFI < 0) ? tskNO_AFFINITY : TASK_CORE_WIFI                     // pin to core 0 (ESP32 WiFi stack prefers core 0)
   );
 }
 
@@ -38,6 +38,7 @@ static void wifiTask(void*) {
   uint8_t attempt = 0;
 
   for (;;) {
+
     if (WiFi.status() == WL_CONNECTED) {
       // Already connected; sleep a bit and re-check
       vTaskDelay(pdMS_TO_TICKS(1000));
@@ -45,7 +46,7 @@ static void wifiTask(void*) {
     }
 
     // Try to connect
-    Serial.printf("[WiFi] Connecting to %s ...\n", WIFI_SSID);
+    Serial.printf("[WiFi] Connecting to %s ...\r\n", WIFI_SSID);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
 
     const uint32_t t0 = millis();
@@ -60,9 +61,9 @@ static void wifiTask(void*) {
 
     if (connected) {
       attempt = 0; // reset attempts on success
-      Serial.printf("[WiFi] Connected. IP: %s RSSI: %d\n",
+      Serial.printf("[WiFi] Connected. IP: %s RSSI: %d\r\n",
                     WiFi.localIP().toString().c_str(), WiFi.RSSI());
-      app_set_bits(AppBits::NET_UP);         // <-- LED will flip to PULSE_1S
+      //app_set_bits(AppBits::NET_UP);         // <-- LED will flip to PULSE_1S
     } else {
       attempt++;
       Serial.println("[WiFi] Connect timeout.");
@@ -90,7 +91,7 @@ static void onWiFiEvent(WiFiEvent_t event) {
       break;
 
     case SYSTEM_EVENT_STA_GOT_IP:
-      Serial.printf("[WiFi] GOT_IP: %s\n", WiFi.localIP().toString().c_str());
+      Serial.printf("[WiFi] GOT_IP: %s\r\n", WiFi.localIP().toString().c_str());
       app_set_bits(AppBits::NET_UP);
       break;
 
