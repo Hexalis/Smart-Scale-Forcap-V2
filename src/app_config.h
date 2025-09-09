@@ -1,7 +1,8 @@
 #pragma once
 #include <stdint.h>
 // ---- Pins ----
-static constexpr int LED_PIN = 5;
+static constexpr int LED1_PIN = 5;
+static constexpr int LED2_PIN = 4;
 
 // ---- LED engine ----
 static constexpr uint16_t LED_TICK_MS = 25;
@@ -37,10 +38,6 @@ static constexpr uint32_t TASK_STACK_BTN_HANDLER = 4096;
 static constexpr uint8_t  TASK_PRIO_BTN_HANDLER  = 1;
 static constexpr int8_t   TASK_CORE_BTN_HANDLER  = 1;
 
-// TEMP test creds — change to your network for now
-static constexpr char WIFI_SSID[] = "FREE_WI-FI_dvigalo";
-static constexpr char WIFI_PASS[] = "Kuhancek123";
-
 // Timeouts
 static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000; // per attempt
 static constexpr uint8_t  WIFI_MAX_ATTEMPTS       = 3;     // then we give up (for now)
@@ -67,3 +64,21 @@ static constexpr uint16_t BTN_LONG_MS      = 2000;
 static constexpr float    DELTA_SEND_G     = 20.0f; // trigger threshold
 static constexpr float    STABILITY_BAND_G = 6.0f;  // how close readings must be (±band)
 static constexpr uint32_t STABILITY_MS     = 800;   // must stay stable for this long
+
+// ---- Server / HTTP ----
+static constexpr char     SERVER_BASE_URL[]   = "https://tehtnice.forcapsolutions.net";
+static constexpr uint32_t HTTP_TIMEOUT_MS     = 7000;
+static constexpr bool     HTTP_TLS_INSECURE   = true;   // dev: accept self-signed
+
+// ---- AP portal (fallback Wi-Fi setup) ----
+static constexpr char AP_SSID[]   = "SmartScale-Setup";
+static constexpr char AP_PASS[]   = "scale123";      // ≥8 chars or leave "" for open AP
+static constexpr uint8_t  AP_CHAN = 6;
+static constexpr uint32_t AP_IDLE_REBOOT_MS = 10UL * 60UL * 1000UL; // reboot after 10 min idle
+
+// NVS keys (same "smartscale" namespace you already open via nvs_init)
+static constexpr char WIFI_KEY_SSID[] = "wifi_ssid";
+static constexpr char WIFI_KEY_PASS[] = "wifi_pass";
+
+// Boot combo to wipe Wi-Fi creds
+static constexpr uint32_t BOOT_WIPE_HOLD_MS = 3000;  // hold both buttons for 3s at boot

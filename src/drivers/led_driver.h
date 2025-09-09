@@ -1,18 +1,32 @@
 #pragma once
 #include <Arduino.h>
 
+enum class LedId : uint8_t {
+  LED1 = 0,
+  LED2 = 1
+};
+
 enum class LEDPattern : uint8_t {
   OFF,
   SOLID,
-  SLOW_BLINK,   // 200ms on / 800ms off
-  FAST_BLINK,   // 200ms on / 200ms off
-  PULSE_1S      // brief 50ms “online” pulse every 1s
+  SLOW_BLINK,
+  FAST_BLINK,
+  PULSE_1S
 };
 
-void led_init(int gpiopin, bool activeLow = true, int ws2812Pin = -1);
-void led_setPattern(LEDPattern p);
-void led_tick();             // call every LED_TICK_MS
-
-// for debugging
-LEDPattern led_getPattern();
+// GPIO LEDs
+void led_init_gpio(LedId id, int pin, bool activeLow = false);
+void led_setPattern(LedId id, LEDPattern p);
+void led_tick_all();
 const char* led_patternName(LEDPattern p);
+
+// NEW: mirror LED1 to a single WS2812 pixel (optional)
+void led_enable_ws2812_mirror(
+  int dataPin,
+  uint8_t r_on,
+  uint8_t g_on,
+  uint8_t b_on,
+  uint8_t r_off = 0,
+  uint8_t g_off = 0,
+  uint8_t b_off = 0
+);

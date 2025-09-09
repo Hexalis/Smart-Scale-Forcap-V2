@@ -7,6 +7,8 @@
 
 #include "app_config.h"
 #include "core/app_state.h"
+#include "net/ap_portal.h"
+#include "storage/nvs_store.h"
 
 static void wifiTask(void*);
 static void onWiFiEvent(WiFiEvent_t event);
@@ -35,6 +37,22 @@ static void wifiTask(void*) {
   WiFi.mode(WIFI_STA);
   WiFi.persistent(false);      // don't write to flash on each connect
 
+
+  // Try to load saved creds from NVS
+  String ssid, pass;
+  bool haveCreds = nvs_load_string(WIFI_KEY_SSID, ssid);
+  if (haveCreds) (void)nvs_load_string(WIFI_KEY_PASS, pass);
+
+  if (!haveCreds) {
+    Serial.println("[WiFi] No saved creds → AP portal");
+    ap_portal_run();   // will reboot after saving
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  Serial.printf("[WiFi] Saved SSID: \"%s\" (pass_len=%u)\r\n",
+                ssid.c_str(), (unsigned)pass.length());
+
   uint8_t attempt = 0;
 
   for (;;) {
@@ -46,8 +64,8 @@ static void wifiTask(void*) {
     }
 
     // Try to connect
-    Serial.printf("[WiFi] Connecting to %s ...\r\n", WIFI_SSID);
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    Serial.printf("[WiFi] Connecting to %s ...\r\n", ssid.c_str());
+    WiFi.begin(ssid.c_str(), pass.c_str());
 
     const uint32_t t0 = millis();
     bool connected = false;
@@ -70,10 +88,8 @@ static void wifiTask(void*) {
       app_clear_bits(AppBits::NET_UP);       // ensure flag is clear
 
       if (attempt >= WIFI_MAX_ATTEMPTS) {
-        Serial.println("[WiFi] Max attempts reached. Waiting before retry...");
-        // Later we’ll switch to AP-portal here. For now just back off.
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        attempt = 0; // allow further retries
+        Serial.println("[WiFi] Max attempts reached → AP portal");
+        ap_portal_run();   // never returns, reboots
       } else {
         vTaskDelay(pdMS_TO_TICKS(1000));
       }

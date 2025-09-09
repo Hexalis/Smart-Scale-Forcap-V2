@@ -1,121 +1,105 @@
 #include "led_driver.h"
 #include <FastLED.h>
 
-static int s_gpioPin = -1;
-static int s_wsPin = -1;
-static bool s_activeLow = true;    // true->LED is on when pin is LOW
-static LEDPattern s_pat = LEDPattern::OFF;
+#ifndef MAX_LEDS_LOGICAL
+#define MAX_LEDS_LOGICAL 2
+#endif
 
-// WS2812 state
-#define NUM_LEDS 1
-static CRGB leds[NUM_LEDS];
+struct LedState {
+  int       pin         = -1;
+  bool      activeLow   = false;
+  LEDPattern pattern    = LEDPattern::OFF;
+  uint32_t  nextMs      = 0;
+  bool      logicalOn   = false;  // abstract on/off decided by pattern
+  uint8_t   pulsePhase  = 0;
+};
 
-// simple scheduler
-static uint32_t s_nextMs = 0;
-static bool s_state  = false;          // current logical state (true = ON = pin LOW)
-static uint8_t s_pulsePhase = 0;
+static LedState s_leds[MAX_LEDS_LOGICAL];
 
-void led_init(int pin, bool activeLow, int ws2812Pin) {
-  s_gpioPin = pin;
-  s_activeLow = activeLow;
-  s_wsPin = ws2812Pin;
+// ---- WS2812 mirror (optional) ----
+static bool   s_wsMirrorEnabled = false;
+static CRGB   s_wsPixel[1];
+static uint8_t s_ws_on[3]  = {0, 255, 0}; // default ON = green
+static uint8_t s_ws_off[3] = {0, 0, 0};   // default OFF = black
 
-  // GPIO LED setup (only if provided)
-  if (s_gpioPin >= 0) {
-    pinMode(s_gpioPin, OUTPUT);
-    // start OFF
-    digitalWrite(s_gpioPin, s_activeLow ? HIGH : LOW);
-  }
-
-  // WS2812 setup (only if provided)
-  if (s_wsPin >= 0) {
-    FastLED.addLeds<WS2812, 8, GRB>(leds, NUM_LEDS); //hardcoded to pin 8
-
-    FastLED.clear();
-    FastLED.show();
-  }
-
-  s_pat = LEDPattern::OFF;
-  s_nextMs = 0;
-  s_state = false;
-  s_pulsePhase = 0;
+static void write_gpio(const LedState* s, bool on) {
+  if (!s || s->pin < 0) return;
+  digitalWrite(s->pin, (s->activeLow ? (on ? LOW : HIGH) : (on ? HIGH : LOW)));
 }
 
-void led_setPattern(LEDPattern p) {
-  s_pat = p;
-  // reset internal timing so pattern changes feel snappy
-  s_nextMs = 0;
-  s_state = false;
-  s_pulsePhase = 0;
-
-  // reset outputs to OFF
-  if (s_gpioPin >= 0) {
-    digitalWrite(s_gpioPin, s_activeLow ? HIGH : LOW);
-  }
-  if (s_wsPin >= 0) {
-    FastLED.clear();
-    FastLED.show();
-  }
+static void reset_runtime(LedState* S) {
+  if (!S) return;
+  S->nextMs = 0;
+  S->logicalOn = false;
+  S->pulsePhase = 0;
+  write_gpio(S, false);
 }
 
-static inline void writeOutputs(bool on) {
-  // GPIO LED
-  if (s_gpioPin >= 0) {
-    if (s_activeLow) {
-      digitalWrite(s_gpioPin, on ? LOW : HIGH);
-    } else {
-      digitalWrite(s_gpioPin, on ? HIGH : LOW);
-    }
-  }
-  // WS2812 LED
-  if (s_wsPin >= 0) {
-    leds[0] = on ? CRGB::Green : CRGB::Black;
-    FastLED.show();
-  }
-}
+static void tick_one(LedState* L, uint32_t now) {
+  if (!L || L->pin < 0) return;
+  if ((int32_t)(now - L->nextMs) < 0) return;
 
-void led_tick() {
-  const uint32_t now = millis();
-  if ((int32_t)(now - s_nextMs) < 0) return;
-
-  switch (s_pat) {
+  switch (L->pattern) {
     case LEDPattern::OFF:
-      s_state  = false;
-      s_nextMs = now + 500;
-      break;
-
+      L->logicalOn = false; L->nextMs = now + 500; break;
     case LEDPattern::SOLID:
-      s_state  = true;
-      s_nextMs = now + 500;
-      break;
-
+      L->logicalOn = true;  L->nextMs = now + 500; break;
     case LEDPattern::SLOW_BLINK:
-      s_state  = !s_state;
-      s_nextMs = now + (s_state ? 200 : 800);
+      L->logicalOn = !L->logicalOn;
+      L->nextMs = now + (L->logicalOn ? 200 : 800);
       break;
-
     case LEDPattern::FAST_BLINK:
-      s_state  = !s_state;
-      s_nextMs = now + 200;
+      L->logicalOn = !L->logicalOn;
+      L->nextMs = now + 200;
       break;
-
     case LEDPattern::PULSE_1S:
-      if (s_pulsePhase == 0) {
-        s_state      = true;
-        s_nextMs     = now + 50;
-        s_pulsePhase = 1;
+      if (L->pulsePhase == 0) {
+        L->logicalOn = true;  L->nextMs = now + 50;  L->pulsePhase = 1;
       } else {
-        s_state      = false;
-        s_nextMs     = now + 950;
-        s_pulsePhase = 0;
+        L->logicalOn = false; L->nextMs = now + 950; L->pulsePhase = 0;
       }
       break;
   }
 
-  writeOutputs(s_state);
+  write_gpio(L, L->logicalOn);
 }
 
-LEDPattern led_getPattern() { return s_pat; }
+void led_init_gpio(LedId id, int pin, bool activeLow) {
+  uint8_t i = (id == LedId::LED1) ? 0 : 1;
+  s_leds[i].pin = pin;
+  s_leds[i].activeLow = activeLow;
+  s_leds[i].pattern = LEDPattern::OFF;
+  s_leds[i].nextMs = 0;
+  s_leds[i].logicalOn = false;
+  s_leds[i].pulsePhase = 0;
+
+  pinMode(pin, OUTPUT);
+  write_gpio(&s_leds[i], false);
+}
+
+void led_setPattern(LedId id, LEDPattern p) {
+  uint8_t i = (id == LedId::LED1) ? 0 : 1;
+  s_leds[i].pattern = p;
+  reset_runtime(&s_leds[i]);
+}
+
+void led_tick_all() {
+  uint32_t now = millis();
+
+  // Tick LED1 and LED2 (GPIO)
+  tick_one(&s_leds[0], now);
+  tick_one(&s_leds[1], now);
+
+  // Mirror LED1’s logical state onto WS2812 if enabled
+  if (s_wsMirrorEnabled) {
+    if (s_leds[0].logicalOn) {
+      s_wsPixel[0].setRGB(s_ws_on[0], s_ws_on[1], s_ws_on[2]);
+    } else {
+      s_wsPixel[0].setRGB(s_ws_off[0], s_ws_off[1], s_ws_off[2]);
+    }
+    FastLED.show();
+  }
+}
 
 const char* led_patternName(LEDPattern p) {
   switch (p) {
@@ -128,3 +112,15 @@ const char* led_patternName(LEDPattern p) {
   }
 }
 
+void led_enable_ws2812_mirror(int dataPin,
+                              uint8_t r_on, uint8_t g_on, uint8_t b_on,
+                              uint8_t r_off, uint8_t g_off, uint8_t b_off) {
+  FastLED.addLeds<WS2812, /*DATA=*/8, GRB>(s_wsPixel, 1);
+  s_wsPixel[0] = CRGB::Black;
+  FastLED.show();
+
+  s_ws_on[0] = r_on;  s_ws_on[1] = g_on;  s_ws_on[2] = b_on;
+  s_ws_off[0] = r_off; s_ws_off[1] = g_off; s_ws_off[2] = b_off;
+
+  s_wsMirrorEnabled = true;
+}

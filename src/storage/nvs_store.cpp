@@ -22,3 +22,22 @@ bool nvs_load_float(const char* key, float& out) {
   out = prefs.getFloat(key, 0.0f);
   return true;
 }
+
+bool nvs_save_string(const char* key, const String& value) {
+  if (!s_opened) return false;
+  size_t written = prefs.putString(key, value);
+  return written == value.length();
+}
+
+bool nvs_load_string(const char* key, String& out) {
+  if (!s_opened) return false;
+  if (!prefs.isKey(key)) return false;
+  out = prefs.getString(key, "");
+  return out.length() > 0;
+}
+
+bool nvs_remove_key(const char* key) {
+  if (!s_opened) return false;
+  if (!prefs.isKey(key)) return false;
+  return prefs.remove(key);
+}

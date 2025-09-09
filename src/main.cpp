@@ -4,9 +4,10 @@
 
 void setup() {
   Serial.begin(115200);
-  delay(50);
+  delay(2000);
   Serial.println();
   Serial.println("SmartScale boot");
+  
 
   app_state_init();
   supervisor_start();

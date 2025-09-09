@@ -18,17 +18,98 @@ static void uiTask(void*);
 static void buttonTask(void*);
 static void testStateTask(void*); //delete later
 
+static bool physPressed(int pin, bool activeLow) {
+  int v = digitalRead(pin);
+  return activeLow ? (v == LOW) : (v == HIGH);
+}
+
+// Returns true ONLY if BOTH buttons are already held at call time,
+// and they remain held continuously for 'holdMs'. Otherwise returns false quickly.
+static bool boot_combo_held(uint32_t holdMs, bool activeLow) {
+  // Configure inputs (pullups for active-low buttons)
+  pinMode(BTN1_PIN, activeLow ? INPUT_PULLUP : INPUT);
+  pinMode(BTN2_PIN, activeLow ? INPUT_PULLUP : INPUT);
+
+  // If both are NOT held right now → do not block
+  if (!(physPressed(BTN1_PIN, activeLow) && physPressed(BTN2_PIN, activeLow))) {
+    return false;
+  }
+
+  // Both are down now → require a continuous hold for the full duration
+  const TickType_t tick = pdMS_TO_TICKS(10);
+  const uint32_t start = millis();
+
+  while ((millis() - start) < holdMs) {
+    if (!(physPressed(BTN1_PIN, activeLow) && physPressed(BTN2_PIN, activeLow))) {
+      return false; // released before timeout
+    }
+    vTaskDelay(tick); // yield so UI/LED continues to run
+  }
+  return true; // held long enough
+}
+
+// Maps bits to LED base pattern for the main status LED
+static LEDPattern selectPatternMain() {
+  auto bits = app_get_bits();
+  if (bits & AppBits::OTA_ACTIVE)   return LEDPattern::FAST_BLINK;
+  if (bits & AppBits::AP_MODE)      return LEDPattern::FAST_BLINK;
+  if (bits & AppBits::CALIB_ACTIVE) return LEDPattern::FAST_BLINK;
+  if (bits & AppBits::NET_UP)       return LEDPattern::PULSE_1S; // online = subtle pulse
+  return LEDPattern::SLOW_BLINK;                                  // default/connecting
+}
+
+// Example policy for LED2 (aux LED): show Wi-Fi only
+static LEDPattern selectPatternAux() {
+  auto bits = app_get_bits();
+  if (bits & AppBits::AP_MODE) return LEDPattern::FAST_BLINK; // in setup portal
+  if (bits & AppBits::NET_UP)  return LEDPattern::SOLID;      // Wi-Fi OK
+  return LEDPattern::OFF;
+}
+
+
+
 void supervisor_start() {
   // Initial mode & LED
   app_set_mode(AppMode::WIFI_CONNECTING); // default at boot for now
-  led_init(LED_PIN, true, 8);
-  led_setPattern(LEDPattern::SLOW_BLINK);
+
+
+  //LED1
+  led_init_gpio(LedId::LED1, LED1_PIN, /*activeLow=*/true);
+  // Use GPIO for LED2
+  led_init_gpio(LedId::LED2, LED2_PIN, /*activeLow=*/true);
+  
+  // Optional: mirror LED1 to built-in WS pixel on pin 8, ON = green
+  led_enable_ws2812_mirror(/*dataPin=*/8, /*r*/0,/*g*/255,/*b*/0);
+
+  // Default patterns at boot
+  led_setPattern(LedId::LED1, LEDPattern::SLOW_BLINK);
+  led_setPattern(LedId::LED2, LEDPattern::OFF);
+
+  nvs_init("smartscale");
+
+  // Indicate we’re checking for boot combo
+  led_setPattern(LedId::LED1, LEDPattern::FAST_BLINK);
+  Serial.println("[BOOT] Hold BOTH buttons ~3s to clear Wi-Fi creds...");
+
+ if (boot_combo_held(BOOT_WIPE_HOLD_MS, /*activeLow=*/true)) {
+  Serial.println("[BOOT] Combo detected → clearing Wi-Fi creds");
+  led_setPattern(LedId::LED1, LEDPattern::SOLID);
+
+  vTaskDelay(pdMS_TO_TICKS(1000));
+
+  nvs_remove_key(WIFI_KEY_SSID);
+  nvs_remove_key(WIFI_KEY_PASS);
+
+  vTaskDelay(pdMS_TO_TICKS(300));
+  ESP.restart();
+}
+
+  // continue normal boot
+  led_setPattern(LedId::LED1, LEDPattern::SLOW_BLINK);
 
   wifi_start();
 
   timekeeper_start();
-
-  nvs_init("smartscale");
 
   ButtonDriverConfig bcfg{
     .pin1 = BTN1_PIN,
@@ -77,28 +158,27 @@ void supervisor_start() {
   );*/
 }
 
-// Maps bits to LED base pattern
-static LEDPattern selectPattern() {
-  auto bits = app_get_bits();
-  if (bits & AppBits::OTA_ACTIVE) return LEDPattern::FAST_BLINK;  // visible activity
-  if (bits & AppBits::AP_MODE)   return LEDPattern::FAST_BLINK;   // portal = fast blink
-  if (bits & AppBits::CALIB_ACTIVE) return LEDPattern::FAST_BLINK;
-  if (bits & AppBits::NET_UP)    return LEDPattern::PULSE_1S;     // online = subtle pulse
-  return LEDPattern::SLOW_BLINK;                                   // default/connecting
-}
-
 static void uiTask(void*) {
-  LEDPattern current = LEDPattern::SLOW_BLINK;
+  LEDPattern curMain = LEDPattern::SLOW_BLINK;
+  LEDPattern curAux  = LEDPattern::OFF;
 
   for (;;) {
-    auto desired = selectPattern();
-    if (desired != current) {
-      current = desired;
-      led_setPattern(current);
-      Serial.printf("[LED] pattern → %s\r\n", led_patternName(current));
+    LEDPattern desMain = selectPatternMain();
+    LEDPattern desAux  = selectPatternAux();
+
+    if (desMain != curMain) {
+      curMain = desMain;
+      led_setPattern(LedId::LED1, curMain);
+      Serial.printf("[LED1] pattern → %s\r\n", led_patternName(curMain));
+    }
+    if (desAux != curAux) {
+      curAux = desAux;
+      led_setPattern(LedId::LED2, curAux);
+      Serial.printf("[LED2] pattern → %s\r\n", led_patternName(curAux));
     }
 
-    led_tick();
+    // Tick both LEDs once per loop
+    led_tick_all();
     vTaskDelay(pdMS_TO_TICKS(LED_TICK_MS));
   }
 }
