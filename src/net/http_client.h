@@ -1,14 +1,10 @@
 #pragma once
 #include <Arduino.h>
 
-bool http_post_json(const char* path,
-                    const String& json,
-                    int& out_status,
-                    String* out_body = nullptr);
+void http_init(const char* base_url);
 
-bool http_post_form(const char* path,          // NEW
-                    const String& formBody,    // "a=1&b=2" (already encoded)
-                    int& out_status,
-                    String* out_body = nullptr);
+// Low-level POST helper (form encoded). Returns true on 2xx and fills response.
+bool http_post_form(const String& path, const String& body, String& outResponse);
 
-String http_build_url(const char* path);
+// Optional helpers
+String http_mac();     // Wi-Fi MAC ("AA:BB:...")

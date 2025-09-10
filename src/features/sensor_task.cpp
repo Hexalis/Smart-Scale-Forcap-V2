@@ -6,6 +6,7 @@
 #include "drivers/hx711_driver.h"
 #include "core/app_state.h"
 #include "features/calibration.h"
+#include "net/api_client.h"
 
 // --- Pins (set to your wiring) ---
 static constexpr int HX_DOUT = 1;   // change me
@@ -106,6 +107,17 @@ static void sensorTask(void*) {
         const bool increased = (finalVal - prev) >= 0.0f;
         const char* kind     = increased ? "ADD" : "REMOVE";
         Serial.printf("[MEAS] %s stable: %.1f g (prev %.1f g)\r\n", kind, finalVal, prev);
+        
+        if(!increased) {
+          finalVal = finalVal-prev;
+        }
+          
+        if (app_get_bits() & AppBits::NET_UP) { // only try if online
+          bool ok = api_post_weight(finalVal, DEVICE_NAME);
+          Serial.printf("[MEAS] post weight %.2f → %s\r\n", finalVal, ok ? "OK" : "FAIL");
+        } else {
+          Serial.println("[MEAS] offline; skipped post (later: queue for upload)");
+        }
 
         state  = IDLE;
         inBand = false;

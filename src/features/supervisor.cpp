@@ -12,11 +12,15 @@
 #include "storage/nvs_store.h"
 #include "drivers/button_driver.h"
 #include "features/calibration.h"
+#include "net/http_client.h"
+#include "core/identity.h"
+#include "net/api_client.h"
 
 
 static void uiTask(void*);
 static void buttonTask(void*);
 static void testStateTask(void*); //delete later
+
 
 static bool physPressed(int pin, bool activeLow) {
   int v = digitalRead(pin);
@@ -72,7 +76,6 @@ void supervisor_start() {
   // Initial mode & LED
   app_set_mode(AppMode::WIFI_CONNECTING); // default at boot for now
 
-
   //LED1
   led_init_gpio(LedId::LED1, LED1_PIN, /*activeLow=*/true);
   // Use GPIO for LED2
@@ -91,18 +94,18 @@ void supervisor_start() {
   led_setPattern(LedId::LED1, LEDPattern::FAST_BLINK);
   Serial.println("[BOOT] Hold BOTH buttons ~3s to clear Wi-Fi creds...");
 
- if (boot_combo_held(BOOT_WIPE_HOLD_MS, /*activeLow=*/true)) {
-  Serial.println("[BOOT] Combo detected → clearing Wi-Fi creds");
-  led_setPattern(LedId::LED1, LEDPattern::SOLID);
+  if (boot_combo_held(BOOT_WIPE_HOLD_MS, /*activeLow=*/true)) {
+    Serial.println("[BOOT] Combo detected → clearing Wi-Fi creds");
+    led_setPattern(LedId::LED1, LEDPattern::SOLID);
 
-  vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
-  nvs_remove_key(WIFI_KEY_SSID);
-  nvs_remove_key(WIFI_KEY_PASS);
+    nvs_remove_key(WIFI_KEY_SSID);
+    nvs_remove_key(WIFI_KEY_PASS);
 
-  vTaskDelay(pdMS_TO_TICKS(300));
-  ESP.restart();
-}
+    vTaskDelay(pdMS_TO_TICKS(300));
+    ESP.restart();
+  }
 
   // continue normal boot
   led_setPattern(LedId::LED1, LEDPattern::SLOW_BLINK);
@@ -110,6 +113,9 @@ void supervisor_start() {
   wifi_start();
 
   timekeeper_start();
+
+  http_init(SERVER_BASE_URL);
+
 
   ButtonDriverConfig bcfg{
     .pin1 = BTN1_PIN,
@@ -143,7 +149,7 @@ void supervisor_start() {
     nullptr,    // stack: calibration needs some room
     TASK_PRIO_BTN_HANDLER,
     nullptr,
-    (TASK_CORE_BTN_HANDLER < 0) ? tskNO_AFFINITY : TASK_CORE_BTN_HANDLER 
+    (TASK_CORE_BTN_HANDLER < 0) ? tskNO_AFFINITY : TASK_CORE_BTN_HANDLER
   );
 
     // TEMP: start test state toggler
@@ -203,7 +209,10 @@ static void buttonTask(void*) {
         Serial.println("[BTN] Tare done");
       }
       else if (ev.type == ButtonEventType::BTN2_SHORT) {
-        Serial.println("[BTN] Measurement finished (TODO: POST)");
+        Serial.println("[BTN] Measurement finished");
+        uint32_t ts = time_epoch();
+        bool ok = api_post_finish(ts);
+        Serial.printf("[BTN] Measurement finished → POST %s\r\n", ok ? "OK" : "FAIL");
       }
     }
   }

@@ -1,128 +1,55 @@
 #include "http_client.h"
-
-#include <Arduino.h>
-#include <WiFi.h>
 #include <HTTPClient.h>
-
-#include "app_config.h"
 #include "core/app_state.h"
 
-// ----------------- helpers -----------------
+static String s_base;
+static constexpr uint32_t HTTP_TIMEOUT_MS = 8000;
+static constexpr uint8_t  HTTP_RETRIES    = 2;
 
-static bool is_https_base() {
-  return (strncmp(SERVER_BASE_URL, "https://", 8) == 0);
+static String build_url(const String& path) {
+  if (s_base.length() == 0) return path;
+  if (s_base.endsWith("/"))  return s_base + path;
+  return s_base + "/" + path;
 }
 
-String http_build_url(const char* path) {
-  String base = SERVER_BASE_URL;
-  String p    = path ? path : "/";
-  if (!base.endsWith("/")) base += "/";
-  if (p.startsWith("/"))   p.remove(0, 1);
-  return base + p;
+struct PostingScope {
+  PostingScope()  { app_set_bits(AppBits::POSTING); }
+  ~PostingScope() { app_clear_bits(AppBits::POSTING); }
+};
+
+void http_init(const char* base_url) {
+  s_base = base_url ? String(base_url) : String();
 }
 
-static bool ensure_net() {
-  if (!(app_get_bits() & AppBits::NET_UP)) {
-    Serial.println("[HTTP] NET_UP is not set");
-    return false;
+String http_mac() {
+  return WiFi.macAddress();
+}
+
+bool http_post_form(const String& path, const String& body, String& outResponse) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  PostingScope inFlight;
+  const String url = build_url(path);
+
+  for (uint8_t attempt = 0; attempt < (uint8_t)(1 + HTTP_RETRIES); ++attempt) {
+    HTTPClient http;
+    http.setConnectTimeout(HTTP_TIMEOUT_MS);
+    http.begin(url);
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    http.addHeader("User-Agent", "SmartScale/1.0");
+
+    int code = http.POST(body);
+    Serial.printf("[HTTP] → code=%d\r\n", code);
+
+    if (code > 0 && code >= 200 && code < 300) {
+      outResponse = http.getString();
+      Serial.printf("[HTTP] ← response: %s\r\n", outResponse.c_str());
+      http.end();
+      return true;
+    }
+    Serial.printf("[HTTP] POST failed: %s\r\n", http.errorToString(code).c_str());
+    http.end();
+    vTaskDelay(pdMS_TO_TICKS(250));
   }
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[HTTP] WiFi.status != CONNECTED");
-    return false;
-  }
-  return true;
-}
-
-// ----------------- core POST engine -----------------
-
-static bool do_post(const char* path,
-                    const String& body,
-                    const char* contentType,
-                    int& out_status,
-                    String* out_body)
-{
-  out_status = 0;
-  if (!ensure_net()) return false;
-
-  WiFiClient *raw = nullptr;
-  WiFiClientSecure *tls = nullptr;
-
-  if (is_https_base()) {
-    tls = new WiFiClientSecure();
-    if (!tls) {
-      Serial.println("[HTTP] oom tls");
-      return false;
-    }
-#if defined(ARDUINO_ARCH_ESP32)
-    if (HTTP_TLS_INSECURE) {
-      tls->setInsecure(); // WARNING: dev only
-    } else {
-      // TODO: tls->setCACert(root_ca_pem); // for production
-    }
-#endif
-    raw = tls;
-  } else {
-    raw = new WiFiClient();
-    if (!raw) {
-      Serial.println("[HTTP] oom tcp");
-      return false;
-    }
-  }
-
-  bool ok = false;
-  HTTPClient http;
-  const String url = http_build_url(path);
-
-  do {
-    if (!http.begin(*raw, url)) {
-      Serial.printf("[HTTP] begin() failed: %s\n", url.c_str());
-      break;
-    }
-
-    http.setTimeout(HTTP_TIMEOUT_MS);
-    http.addHeader("Content-Type", contentType);
-
-    Serial.printf("[HTTP] POST %s  len=%u  type=%s\n",
-                  url.c_str(), body.length(), contentType);
-
-    int code = http.POST((uint8_t*)body.c_str(), body.length());
-    out_status = code;
-
-    if (code <= 0) {
-      Serial.printf("[HTTP] POST error: %s\n",
-                    http.errorToString(code).c_str());
-      break;
-    }
-
-    String resp = http.getString();
-    Serial.printf("[HTTP] code=%d  bodyLen=%u\n",
-                  code, resp.length());
-    if (out_body) *out_body = resp;
-
-    ok = (code >= 200 && code < 300);
-  } while (false);
-
-  http.end();
-  delete raw; // cleans up WiFiClient*
-
-  return ok;
-}
-
-// ----------------- public wrappers -----------------
-
-bool http_post_json(const char* path,
-                    const String& json,
-                    int& out_status,
-                    String* out_body)
-{
-  return do_post(path, json, "application/json", out_status, out_body);
-}
-
-bool http_post_form(const char* path,
-                    const String& formBody,
-                    int& out_status,
-                    String* out_body)
-{
-  return do_post(path, formBody, "application/x-www-form-urlencoded",
-                 out_status, out_body);
+  return false;
 }

@@ -9,6 +9,7 @@
 #include "core/app_state.h"
 #include "net/ap_portal.h"
 #include "storage/nvs_store.h"
+#include "core/identity.h"
 
 static void wifiTask(void*);
 static void onWiFiEvent(WiFiEvent_t event);
@@ -35,7 +36,7 @@ void wifi_start() {
 static void wifiTask(void*) {
   // Station mode
   WiFi.mode(WIFI_STA);
-  WiFi.persistent(false);      // don't write to flash on each connect
+  WiFi.persistent(false);
 
 
   // Try to load saved creds from NVS
@@ -50,8 +51,7 @@ static void wifiTask(void*) {
     return;
   }
 
-  Serial.printf("[WiFi] Saved SSID: \"%s\" (pass_len=%u)\r\n",
-                ssid.c_str(), (unsigned)pass.length());
+  Serial.printf("[WiFi] Saved SSID: \"%s\" (pass_len=%u)\r\n", ssid.c_str(), (unsigned)pass.length());
 
   uint8_t attempt = 0;
 
@@ -81,7 +81,11 @@ static void wifiTask(void*) {
       attempt = 0; // reset attempts on success
       Serial.printf("[WiFi] Connected. IP: %s RSSI: %d\r\n",
                     WiFi.localIP().toString().c_str(), WiFi.RSSI());
-      //app_set_bits(AppBits::NET_UP);         // <-- LED will flip to PULSE_1S
+      app_set_bits(AppBits::NET_UP);
+      
+      //Do welcome POST here (once per connection)
+      identity_ensure_welcome();
+
     } else {
       attempt++;
       Serial.println("[WiFi] Connect timeout.");

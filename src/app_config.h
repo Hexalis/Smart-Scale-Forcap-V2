@@ -14,7 +14,7 @@ static constexpr uint8_t  TASK_PRIO_UI      = 2;
 static constexpr int8_t   TASK_CORE_UI      = 1;     // 0/1, -1=no affinity
 
 // Wi-Fi manager (connect/retry loop)
-static constexpr uint32_t TASK_STACK_WIFI   = 4096;  // Wi-Fi callbacks can be deep
+static constexpr uint32_t TASK_STACK_WIFI   = 12288;  // Wi-Fi callbacks can be deep
 static constexpr uint8_t  TASK_PRIO_WIFI    = 3;
 static constexpr int8_t   TASK_CORE_WIFI    = 0;
 
@@ -48,7 +48,7 @@ static constexpr char     NTP_SERVER_2[]      = "time.google.com";
 static constexpr uint32_t NTP_SYNC_TIMEOUT_MS = 5000;     // wait up to 5s for time
 
 // Timezone for Slovenia (Europe/Ljubljana): CET with DST to CEST
-static constexpr char     TZ_SLOVENIA[]       = "CET-1CEST,M3.5.0/2,M10.5.0/3";
+static constexpr char     TZ_SLOVENIA[]       = "CET-1CEST,M3.5.0,M10.5.0/3";
 
 // Periodic resync interval (e.g., 1 hour)
 static constexpr uint32_t TIME_RESYNC_INTERVAL_MS = 3600UL * 1000UL;
@@ -69,6 +69,9 @@ static constexpr uint32_t STABILITY_MS     = 800;   // must stay stable for this
 static constexpr char     SERVER_BASE_URL[]   = "https://tehtnice.forcapsolutions.net";
 static constexpr uint32_t HTTP_TIMEOUT_MS     = 7000;
 static constexpr bool     HTTP_TLS_INSECURE   = true;   // dev: accept self-signed
+
+// Device "friendly" name to send with weight posts
+static constexpr char DEVICE_NAME[] = "Sample Scale1";
 
 // ---- AP portal (fallback Wi-Fi setup) ----
 static constexpr char AP_SSID[]   = "SmartScale-Setup";

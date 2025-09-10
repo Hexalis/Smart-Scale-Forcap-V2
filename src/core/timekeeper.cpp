@@ -23,9 +23,8 @@ void timekeeper_start() {
 }
 
 static bool waitForTime(uint32_t timeoutMs) {
-  // configTime(tz, server1, server2). If you don’t need TZ yet, pass empty TZ.
-  // You can set a TZ later like "CET-1CEST,M3.5.0/2,M10.5.0/3"
-  configTime(0, 0, NTP_SERVER_1, NTP_SERVER_2);
+  // Configure TZ + NTP
+  configTzTime(TZ_SLOVENIA, NTP_SERVER_1, NTP_SERVER_2);
 
   const uint32_t t0 = millis();
   // getLocalTime tries to fill a tm struct; returns true if time is set
@@ -39,10 +38,26 @@ static bool waitForTime(uint32_t timeoutMs) {
   return false;
 }
 
+// Helper: print both Local & UTC
+static void print_times(const char* tag) {
+  time_t now = time(nullptr);
+
+  // Local
+  struct tm lt;
+  localtime_r(&now, &lt);
+  char loc[40];
+  strftime(loc, sizeof(loc), "%Y-%m-%d %H:%M:%S %Z", &lt);
+
+  // UTC
+  struct tm ut;
+  gmtime_r(&now, &ut);
+  char utc[40];
+  strftime(utc, sizeof(utc), "%Y-%m-%d %H:%M:%S UTC", &ut);
+
+  Serial.printf("[Time] %s  Local=%s  UTC=%s\r\n", tag, loc, utc);
+}
+
 static void timeTask(void*) {
-  // Set timezone once (affects getLocalTime/ctime/localtime; not needed for epoch)
-  setenv("TZ", TZ_SLOVENIA, 1);
-  tzset();
 
   bool lastNet = false;
   uint32_t lastSyncMs = 0;  // 0 = never synced in this boot
@@ -57,17 +72,7 @@ static void timeTask(void*) {
       if (waitForTime(NTP_SYNC_TIMEOUT_MS)) {
         app_set_bits(AppBits::TIME_VALID);
         lastSyncMs = nowMs;
-
-        time_t now = time(nullptr);
-        struct tm tinfo;
-        if (getLocalTime(&tinfo)) {
-          // Format: YYYY-MM-DD HH:MM:SS
-          char buf[32];
-          strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tinfo);
-          Serial.printf("[Time] Sync OK. Epoch=%ld  Local=%s\r\n", (long)now, buf);
-        } else {
-          Serial.printf("[Time] Sync OK. Epoch=%ld\r\n", (long)now);
-        }
+        print_times("Sync OK.");
       }
     }
 
@@ -83,19 +88,9 @@ static void timeTask(void*) {
       if (waitForTime(NTP_SYNC_TIMEOUT_MS)) {
         app_set_bits(AppBits::TIME_VALID);
         lastSyncMs = nowMs;
-
-        time_t now = time(nullptr);
-        struct tm tinfo;
-        if (getLocalTime(&tinfo)) {
-          char buf[32];
-          strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tinfo);
-          Serial.printf("[Time] Resync OK. Epoch=%ld  Local=%s\r\n", (long)now, buf);
-        } else {
-          Serial.printf("[Time] Resync OK. Epoch=%ld\r\n", (long)now);
-        }
+        print_times("Resync OK.");
       }
     }
-
 
     lastNet = netUp;
     vTaskDelay(pdMS_TO_TICKS(500));
