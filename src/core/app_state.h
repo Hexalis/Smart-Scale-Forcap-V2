@@ -20,6 +20,7 @@ namespace AppBits {
   static constexpr EventBits_t POSTING     = 1 << 3;
   static constexpr EventBits_t OTA_ACTIVE  = 1 << 4;
   static constexpr EventBits_t CALIB_ACTIVE= 1 << 5;
+  static constexpr EventBits_t READY       = 1 << 6;
 }
 
 void app_state_init();

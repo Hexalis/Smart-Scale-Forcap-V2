@@ -102,21 +102,21 @@ static void sensorTask(void*) {
         float finalVal = HX::getUnits(20);
 
         float prev = lastStable;
+        float diff = finalVal - prev;
         lastStable = finalVal;
 
-        const bool increased = (finalVal - prev) >= 0.0f;
-        const char* kind     = increased ? "ADD" : "REMOVE";
-        Serial.printf("[MEAS] %s stable: %.1f g (prev %.1f g)\r\n", kind, finalVal, prev);
+        const char* kind = (diff >= 0.0f) ? "ADD" : "REMOVE";
+        Serial.printf("[MEAS] %s stable: Δ%.1f g (now %.1f g, prev %.1f g)\r\n", kind, diff , finalVal, prev);
         
-        if(!increased) {
-          finalVal = finalVal-prev;
-        }
-          
-        if (app_get_bits() & AppBits::NET_UP) { // only try if online
-          bool ok = api_post_weight(finalVal, DEVICE_NAME);
-          Serial.printf("[MEAS] post weight %.2f → %s\r\n", finalVal, ok ? "OK" : "FAIL");
+        if ((app_get_bits() & AppBits::READY) == 0) {
+          Serial.println("[MEAS] not ready; not posting and not queueing");
         } else {
-          Serial.println("[MEAS] offline; skipped post (later: queue for upload)");
+          if (app_get_bits() & AppBits::NET_UP) {
+            bool ok = api_post_weight(diff, DEVICE_NAME);
+            Serial.printf("[MEAS] post Δweight %.2f → %s\r\n", diff, ok ? "OK" : "FAIL"); 
+          } else {
+            Serial.println("[MEAS] offline; skipped post (later: queue for upload)");
+          }
         }
 
         state  = IDLE;

@@ -8,6 +8,7 @@
 static constexpr const char* PATH_WELCOME = "";
 static constexpr const char* PATH_WEIGHT  = "";
 static constexpr const char* PATH_FINISH  = "";
+static constexpr const char* PATH_READY  = "";
 
 String api_welcome(const String& mac, const String& currentId) {
   String body = "mac=" + mac + "&id=" + (currentId.length() ? currentId : "none");
@@ -59,6 +60,24 @@ bool api_post_weight(float w, const String& name) {
   Serial.printf("[SERVER] → WEIGHT: %s\r\n", body.c_str());
   const bool ok = http_post_form(PATH_WEIGHT, body, resp);
   Serial.printf("[SERVER] ← WEIGHT resp: %s (ok=%d)\r\n", resp.c_str(), ok);
+  return ok;
+}
+
+bool api_post_ready(uint32_t epoch) {
+  const String mac = http_mac();
+  const String id  = identity_get_id();
+
+  String body;
+  body.reserve(96);
+  body += "mac=";    body += mac;
+  body += "&id=";    body += id;
+  body += "&event=ready";
+  body += "&ts=";    body += String(epoch);   // ok if 0
+
+  String resp;
+  Serial.printf("[SERVER] → READY: %s\r\n", body.c_str());
+  const bool ok = http_post_form(PATH_READY, body, resp);
+  Serial.printf("[SERVER] ← READY resp: %s (ok=%d)\r\n", resp.c_str(), ok);
   return ok;
 }
 

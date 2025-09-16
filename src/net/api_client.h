@@ -7,4 +7,5 @@ String api_welcome(const String& mac, const String& currentId);
 
 // These we’ll implement after welcome works:
 bool api_post_weight(float w, const String& name);
+bool api_post_ready(uint32_t epoch);
 bool api_post_finish(uint32_t epoch);

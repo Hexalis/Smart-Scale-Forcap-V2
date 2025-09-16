@@ -209,10 +209,21 @@ static void buttonTask(void*) {
         Serial.println("[BTN] Tare done");
       }
       else if (ev.type == ButtonEventType::BTN2_SHORT) {
-        Serial.println("[BTN] Measurement finished");
-        uint32_t ts = time_epoch();
-        bool ok = api_post_finish(ts);
-        Serial.printf("[BTN] Measurement finished → POST %s\r\n", ok ? "OK" : "FAIL");
+        const bool wasReady = (app_get_bits() & AppBits::READY);
+        const uint32_t ts = time_epoch();
+       
+        if(!wasReady){
+          app_set_bits(AppBits::READY);
+          Serial.println("[BTN] READY set (measurement started)");
+          bool ok = api_post_ready(ts);
+          Serial.printf("[BTN] READY → POST %s\r\n", ok ? "OK" : "FAIL");
+        }
+        else{
+          app_clear_bits(AppBits::READY);
+          Serial.println("[BTN] FINISH (measurement stopped)");
+          bool ok = api_post_finish(ts);
+          Serial.printf("[BTN] FINISH → POST %s\r\n", ok ? "OK" : "FAIL");
+        }
       }
     }
   }
