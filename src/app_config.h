@@ -38,6 +38,11 @@ static constexpr uint32_t TASK_STACK_BTN_HANDLER = 4096;
 static constexpr uint8_t  TASK_PRIO_BTN_HANDLER  = 1;
 static constexpr int8_t   TASK_CORE_BTN_HANDLER  = 1;
 
+// OTA handler (check for updates at boot)
+static constexpr uint32_t TASK_STACK_OTA_HANDLER = 8192;
+static constexpr uint8_t  TASK_PRIO_OTA_HANDLER  = 3;
+static constexpr int8_t   TASK_CORE_OTA_HANDLER  = 1;
+
 // Timeouts
 static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000; // per attempt
 static constexpr uint8_t  WIFI_MAX_ATTEMPTS       = 3;     // then we give up (for now)
@@ -85,3 +90,11 @@ static constexpr char WIFI_KEY_PASS[] = "wifi_pass";
 
 // Boot combo to wipe Wi-Fi creds
 static constexpr uint32_t BOOT_WIPE_HOLD_MS = 3000;  // hold both buttons for 3s at boot
+
+// ---- OTA manager ----
+static constexpr char FW_VERSION[]   = "0.0.1";
+static constexpr char MANIFEST_URL[] = "https://hexalis.github.io/manifest.json";
+
+static constexpr uint32_t OTA_BOOT_DELAY_MS = 15000;   // settle after boot
+static constexpr uint32_t OTA_NET_WINDOW_MS = 60000;   // max time to wait for NET_UP
+static constexpr uint32_t OTA_POLL_MS       = 250;     // poll interval

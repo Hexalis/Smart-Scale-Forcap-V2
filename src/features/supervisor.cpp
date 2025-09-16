@@ -15,10 +15,12 @@
 #include "net/http_client.h"
 #include "core/identity.h"
 #include "net/api_client.h"
+#include "net/ota_manager.h"
 
 
 static void uiTask(void*);
 static void buttonTask(void*);
+static void otaBootTask(void *);
 static void testStateTask(void*); //delete later
 
 
@@ -66,6 +68,7 @@ static LEDPattern selectPatternMain() {
 static LEDPattern selectPatternAux() {
   auto bits = app_get_bits();
   if (bits & AppBits::AP_MODE) return LEDPattern::FAST_BLINK; // in setup portal
+  if (bits & AppBits::OTA_ACTIVE)  return LEDPattern::FAST_BLINK;
   if (bits & AppBits::NET_UP)  return LEDPattern::SOLID;      // Wi-Fi OK
   return LEDPattern::OFF;
 }
@@ -152,6 +155,15 @@ void supervisor_start() {
     (TASK_CORE_BTN_HANDLER < 0) ? tskNO_AFFINITY : TASK_CORE_BTN_HANDLER
   );
 
+  xTaskCreatePinnedToCore(
+    otaBootTask, "otaBoot",
+    TASK_STACK_OTA_HANDLER,                // stack (OTA uses HTTP/Update; keep >=8k)
+    nullptr,
+    TASK_PRIO_OTA_HANDLER,  // low priority is fine
+    nullptr,
+    (TASK_CORE_OTA_HANDLER < 0) ? tskNO_AFFINITY : TASK_CORE_OTA_HANDLER                // core (pick 0/1 or -1 for no affinity)
+  );
+
     // TEMP: start test state toggler
   /*xTaskCreatePinnedToCore(
     testStateTask,
@@ -226,6 +238,40 @@ static void buttonTask(void*) {
         }
       }
     }
+  }
+}
+
+static void otaBootTask(void *){
+  // Give system time to boot, Wi-Fi to start trying, etc.
+  vTaskDelay(pdMS_TO_TICKS(OTA_BOOT_DELAY_MS));
+
+  const TickType_t start = xTaskGetTickCount();
+
+  for (;;) {
+    const uint32_t bits = app_get_bits();
+    const bool ready = bits & AppBits::READY;
+    const bool netUp = bits & AppBits::NET_UP;
+
+    // If the user armed the scale → skip OTA this boot
+    if (ready) {
+      Serial.println("[OTA] Boot check skipped: READY=1");
+      vTaskDelete(nullptr);
+    }
+
+    // If network is up and still not READY → do a single OTA check
+    if (netUp && !ready) {
+      Serial.println("[OTA] Boot check: NET_UP && READY=0 → checking…");
+      checkAndUpdate(false);   // this may reboot; otherwise returns
+      vTaskDelete(nullptr);               // done forever on this boot
+    }
+
+    // Timeout: if NET_UP didn’t arrive in time, give up for this boot
+    if ((xTaskGetTickCount() - start) >= pdMS_TO_TICKS(OTA_NET_WINDOW_MS)) {
+      Serial.println("[OTA] Boot check skipped: NET not up within window");
+      vTaskDelete(nullptr);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(OTA_POLL_MS));
   }
 }
 
