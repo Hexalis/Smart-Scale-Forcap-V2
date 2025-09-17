@@ -21,6 +21,8 @@ namespace AppBits {
   static constexpr EventBits_t OTA_ACTIVE  = 1 << 4;
   static constexpr EventBits_t CALIB_ACTIVE= 1 << 5;
   static constexpr EventBits_t READY       = 1 << 6;
+  static constexpr EventBits_t CALIB_WAIT_REMOVE = 1 << 7;
+  static constexpr EventBits_t CALIB_WAIT_100G = 1 << 8;
 }
 
 void app_state_init();

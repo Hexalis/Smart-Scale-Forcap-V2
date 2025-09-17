@@ -14,6 +14,9 @@
 static void wifiTask(void*);
 static void onWiFiEvent(WiFiEvent_t event);
 
+// set by GOT_IP, cleared by DISCONNECTED
+static volatile bool s_got_ip = false;
+
 void wifi_start() {
   // Optional: set hostname so your router shows a friendly name
   WiFi.setHostname("SmartScale");
@@ -65,31 +68,29 @@ static void wifiTask(void*) {
 
     // Try to connect
     Serial.printf("[WiFi] Connecting to %s ...\r\n", ssid.c_str());
+    s_got_ip = false;
     WiFi.begin(ssid.c_str(), pass.c_str());
 
     const uint32_t t0 = millis();
-    bool connected = false;
-    while (millis() - t0 < WIFI_CONNECT_TIMEOUT_MS) {
-        if (WiFi.status() == WL_CONNECTED) {
-            connected = true;
-            break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(200));
+    while (!s_got_ip && (millis() - t0 < WIFI_CONNECT_TIMEOUT_MS)) {
+      vTaskDelay(pdMS_TO_TICKS(100));   // yield while waiting for GOT_IP
     }
 
-    if (connected) {
-      attempt = 0; // reset attempts on success
-      Serial.printf("[WiFi] Connected. IP: %s RSSI: %d\r\n",
-                    WiFi.localIP().toString().c_str(), WiFi.RSSI());
-      app_set_bits(AppBits::NET_UP);
+    if (s_got_ip) {
+      attempt = 0;
+      Serial.printf("[WiFi] Connected. IP: %s RSSI: %d\r\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
       
+      vTaskDelay(pdMS_TO_TICKS(2000));
+
       //Do welcome POST here (once per connection)
       identity_ensure_welcome();
+
+      // small debounce before heavy HTTP (TLS warm-up, DHCP settle)
+      vTaskDelay(pdMS_TO_TICKS(500));
 
     } else {
       attempt++;
       Serial.println("[WiFi] Connect timeout.");
-      app_clear_bits(AppBits::NET_UP);       // ensure flag is clear
 
       if (attempt >= WIFI_MAX_ATTEMPTS) {
         Serial.println("[WiFi] Max attempts reached → AP portal");
@@ -112,11 +113,13 @@ static void onWiFiEvent(WiFiEvent_t event) {
 
     case SYSTEM_EVENT_STA_GOT_IP:
       Serial.printf("[WiFi] GOT_IP: %s\r\n", WiFi.localIP().toString().c_str());
+      s_got_ip = true;
       app_set_bits(AppBits::NET_UP);
       break;
 
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("[WiFi] DISCONNECTED");
+      s_got_ip = false;
       app_clear_bits(AppBits::NET_UP);   // LED back to SLOW_BLINK
       // WiFi.begin(...) will be re-called by the task loop if needed
       break;

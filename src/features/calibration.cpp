@@ -5,6 +5,7 @@
 #include "drivers/hx711_driver.h"
 #include "features/calibration.h"
 #include "storage/nvs_store.h"
+#include "core/app_state.h"
 
 static constexpr const char* KEY_SCALE = "cal_scale";
 
@@ -23,6 +24,7 @@ bool calibration_try_load() {
 bool calibration_run_100g() {
   Serial.printf("\r\n=== Calibration: 100 g ===\r\n");
   Serial.printf("1) Remove all weight. Waiting to stabilize...\r\n");
+  app_set_bits(AppBits::CALIB_WAIT_REMOVE);
 
   // Warm-up + tare for clean offset in getUnits()
   vTaskDelay(pdMS_TO_TICKS(1500));
@@ -34,7 +36,10 @@ bool calibration_run_100g() {
   const long raw_zero = readRawAvg(20);
   Serial.printf("[CAL] raw_zero=%ld\r\n", raw_zero);
 
+  app_clear_bits(AppBits::CALIB_WAIT_REMOVE);
+
   Serial.printf("2) Place the 100 g weight and keep it steady...\r\n");
+  app_set_bits(AppBits::CALIB_WAIT_100G);
 
   // Wait until “something present”
   long raw_ref = 0;
@@ -79,5 +84,6 @@ bool calibration_run_100g() {
   }
 
   Serial.printf("[CAL] Done. Factor saved.\r\n\r\n");
+  app_clear_bits(AppBits::CALIB_WAIT_100G);
   return true;
 }

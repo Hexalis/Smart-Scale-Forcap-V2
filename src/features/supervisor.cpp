@@ -59,17 +59,22 @@ static LEDPattern selectPatternMain() {
   auto bits = app_get_bits();
   if (bits & AppBits::OTA_ACTIVE)   return LEDPattern::FAST_BLINK;
   if (bits & AppBits::AP_MODE)      return LEDPattern::FAST_BLINK;
-  if (bits & AppBits::CALIB_ACTIVE) return LEDPattern::FAST_BLINK;
-  if (bits & AppBits::NET_UP)       return LEDPattern::PULSE_1S; // online = subtle pulse
+  if (bits & AppBits::CALIB_WAIT_REMOVE) return LEDPattern::DOUBLE_PULSE_2S; // calibrating
+  if (bits & AppBits::CALIB_WAIT_100G) return LEDPattern::SOLID; // place 100g weight
+  if (bits & AppBits::POSTING) return LEDPattern::SOLID; // posting = solid
+  if (bits & AppBits::NET_UP) return LEDPattern::PULSE_5S; // online = subtle pulse
   return LEDPattern::SLOW_BLINK;                                  // default/connecting
 }
 
 // Example policy for LED2 (aux LED): show Wi-Fi only
 static LEDPattern selectPatternAux() {
   auto bits = app_get_bits();
-  if (bits & AppBits::AP_MODE) return LEDPattern::FAST_BLINK; // in setup portal
   if (bits & AppBits::OTA_ACTIVE)  return LEDPattern::FAST_BLINK;
-  if (bits & AppBits::NET_UP)  return LEDPattern::SOLID;      // Wi-Fi OK
+  if (bits & AppBits::AP_MODE) return LEDPattern::SOLID; // in setup portal
+  if (bits & AppBits::CALIB_WAIT_REMOVE) return LEDPattern::OFF; // calibrating
+  if (bits & AppBits::CALIB_WAIT_100G) return LEDPattern::DOUBLE_PULSE_2S;
+  if (bits & AppBits::POSTING) return LEDPattern::SOLID; // posting = solid
+  if (bits & AppBits::READY)  return LEDPattern::PULSE_1S;      // Wi-Fi OK
   return LEDPattern::OFF;
 }
 
@@ -129,8 +134,6 @@ void supervisor_start() {
     .longPressMs = BTN_LONG_MS
   };
   buttons_start(bcfg);
-
-  calibration_try_load();
 
   sensor_start();
 
@@ -261,7 +264,7 @@ static void otaBootTask(void *){
     // If network is up and still not READY → do a single OTA check
     if (netUp && !ready) {
       Serial.println("[OTA] Boot check: NET_UP && READY=0 → checking…");
-      checkAndUpdate(false);   // this may reboot; otherwise returns
+      OTA::checkAndUpdate(false);   // this may reboot; otherwise returns
       vTaskDelete(nullptr);               // done forever on this boot
     }
 

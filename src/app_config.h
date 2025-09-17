@@ -44,8 +44,8 @@ static constexpr uint8_t  TASK_PRIO_OTA_HANDLER  = 3;
 static constexpr int8_t   TASK_CORE_OTA_HANDLER  = 1;
 
 // Timeouts
-static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000; // per attempt
-static constexpr uint8_t  WIFI_MAX_ATTEMPTS       = 3;     // then we give up (for now)
+static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 20000; // per attempt
+static constexpr uint8_t  WIFI_MAX_ATTEMPTS       = 10;     // then we give up (for now)
 
 // ---- Time / NTP ----
 static constexpr char     NTP_SERVER_1[]      = "pool.ntp.org";
@@ -98,3 +98,6 @@ static constexpr char MANIFEST_URL[] = "https://hexalis.github.io/manifest.json"
 static constexpr uint32_t OTA_BOOT_DELAY_MS = 15000;   // settle after boot
 static constexpr uint32_t OTA_NET_WINDOW_MS = 60000;   // max time to wait for NET_UP
 static constexpr uint32_t OTA_POLL_MS       = 250;     // poll interval
+
+// -----SPOOL QUEUE-----
+static constexpr size_t SPOOL_MAX_ENTRIES = 1000; // max entries to keep (can be changed at runtime)

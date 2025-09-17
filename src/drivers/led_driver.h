@@ -11,7 +11,10 @@ enum class LEDPattern : uint8_t {
   SOLID,
   SLOW_BLINK,
   FAST_BLINK,
-  PULSE_1S
+  PULSE_1S,
+  PULSE_5S,
+  PULSE_3S,
+  DOUBLE_PULSE_2S,
 };
 
 // GPIO LEDs

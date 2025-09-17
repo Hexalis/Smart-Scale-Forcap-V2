@@ -7,6 +7,8 @@
 #include <Update.h>
 #include <ArduinoJson.h>
 
+namespace OTA {
+
 static OTA_Status performOTA(const String& binUrl);
 
 // compare semantic versions "x.y.z"
@@ -152,3 +154,5 @@ static OTA_Status performOTA(const String& binUrl) {
   ESP.restart();
   return UPDATED_REBOOTING;
 }
+
+} // namespace OTA

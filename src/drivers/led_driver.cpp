@@ -59,6 +59,50 @@ static void tick_one(LedState* L, uint32_t now) {
         L->logicalOn = false; L->nextMs = now + 950; L->pulsePhase = 0;
       }
       break;
+    case LEDPattern::PULSE_5S:
+      if (L->pulsePhase == 0) {
+        L->logicalOn = true;  L->nextMs = now + 50;  L->pulsePhase = 1;
+      } else {
+        L->logicalOn = false; L->nextMs = now + 4950; L->pulsePhase = 0;
+      }
+      break;
+
+    case LEDPattern::PULSE_3S:
+      if (L->pulsePhase == 0) {
+        L->logicalOn = true;  L->nextMs = now + 50;  L->pulsePhase = 1;
+      } else {
+        L->logicalOn = false; L->nextMs = now + 2950; L->pulsePhase = 0;
+      }
+      break;
+    
+    case LEDPattern::DOUBLE_PULSE_2S:
+  switch (L->pulsePhase) {
+    case 0: // first ON
+      L->logicalOn = true;
+      L->nextMs = now + 100;
+      L->pulsePhase = 1;
+      break;
+
+    case 1: // short gap
+      L->logicalOn = false;
+      L->nextMs = now + 100;
+      L->pulsePhase = 2;
+      break;
+
+    case 2: // second ON
+      L->logicalOn = true;
+      L->nextMs = now + 100;
+      L->pulsePhase = 3;
+      break;
+
+    case 3: // long idle
+      default:
+        L->logicalOn = false;
+        L->nextMs = now + 1700;
+        L->pulsePhase = 0;
+        break;
+    }
+    break;
   }
 
   write_gpio(L, L->logicalOn);

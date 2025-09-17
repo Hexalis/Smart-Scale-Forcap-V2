@@ -1,9 +1,9 @@
 #include "http_client.h"
 #include <HTTPClient.h>
 #include "core/app_state.h"
+#include "app_config.h"
 
 static String s_base;
-static constexpr uint32_t HTTP_TIMEOUT_MS = 8000;
 static constexpr uint8_t  HTTP_RETRIES    = 2;
 
 static String build_url(const String& path) {
@@ -31,8 +31,10 @@ bool http_post_form(const String& path, const String& body, String& outResponse)
   PostingScope inFlight;
   const String url = build_url(path);
 
-  for (uint8_t attempt = 0; attempt < (uint8_t)(1 + HTTP_RETRIES); ++attempt) {
-    HTTPClient http;
+  for (uint8_t attempt = 0; attempt < uint8_t(1 + HTTP_RETRIES); ++attempt) {
+    HTTPClient http;                 // FRESH per attempt
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setTimeout(HTTP_TIMEOUT_MS);
     http.setConnectTimeout(HTTP_TIMEOUT_MS);
     http.begin(url);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
